@@ -36,6 +36,10 @@ public class SubscriptionService {
 
         User user = userOpt.get();
 
+        if (user.getSubscription() != null) {
+            throw new RuntimeException("User already has an active subscription");
+        }
+
         int finalAmount = calculateFinalAmount(subscriptionType, noOfScreensRequired);
 
         Subscription subscription = new Subscription();
@@ -78,53 +82,66 @@ public class SubscriptionService {
         //update the subscription in the repository
 
         Optional<User> userOpt = userRepository.findById(userId);
-        if (!userOpt.isPresent()) {
+        if (!userOpt.isPresent()) { // Replace isEmpty() with !isPresent()
             throw new RuntimeException("User not found");
         }
 
         User user = userOpt.get();
         Subscription subscription = user.getSubscription();
 
+        // Check if the user has an active subscription
         if (subscription == null) {
             throw new RuntimeException("User does not have an active subscription");
         }
 
+        // Check if the user is already on the best subscription (ELITE)
         SubscriptionType currentType = subscription.getSubscriptionType();
         if (currentType == SubscriptionType.ELITE) {
             throw new Exception("Already the best Subscription");
         }
 
-        int priceDifference = 0;
-        switch (currentType) {
-            case BASIC:
-                subscription.setSubscriptionType(SubscriptionType.PRO);
-                priceDifference = 100;
-                break;
-            case PRO:
-                subscription.setSubscriptionType(SubscriptionType.ELITE);
-                priceDifference = 100;
-                break;
+        // Calculate the price difference for the upgrade
+        int priceDifference = calculatePriceDifference(currentType);
+
+        // Upgrade the subscription
+        if (currentType == SubscriptionType.BASIC) {
+            subscription.setSubscriptionType(SubscriptionType.PRO);
+        } else if (currentType == SubscriptionType.PRO) {
+            subscription.setSubscriptionType(SubscriptionType.ELITE);
         }
 
+        // Update the total amount paid after the upgrade
         subscription.setTotalAmountPaid(subscription.getTotalAmountPaid() + priceDifference);
 
+        // Save the updated subscription
         subscriptionRepository.save(subscription);
 
         return priceDifference;
     }
 
-    public Integer calculateTotalRevenueOfHotstar(){
+    // Method to calculate the price difference between current and upgraded subscription
+    private int calculatePriceDifference(SubscriptionType currentType) {
+        int priceDifference = 0;
 
-
-
-        java.util.List<Subscription> allSubscriptions = subscriptionRepository.findAll();
-
-        int totalRevenue = 0;
-        for (Subscription subscription : allSubscriptions) {
-            totalRevenue += subscription.getTotalAmountPaid();
+        // Determine the price difference for the upgrade
+        switch (currentType) {
+            case BASIC:
+                priceDifference = 300; // Basic to Pro difference
+                break;
+            case PRO:
+                priceDifference = 200; // Pro to Elite difference
+                break;
         }
 
-        return totalRevenue;
+        return priceDifference;
     }
 
+    public Integer calculateTotalRevenueOfHotstar() {
+
+        List<Subscription> allSubscriptions = subscriptionRepository.findAll();
+
+        return allSubscriptions.stream()
+            .mapToInt(Subscription::getTotalAmountPaid)
+            .sum();
+    }
 }
