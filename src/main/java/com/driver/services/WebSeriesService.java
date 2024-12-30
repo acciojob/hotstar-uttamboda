@@ -43,7 +43,6 @@ public class WebSeriesService {
         // Save the new web series to the repository
         webSeriesRepository.save(webSeries);
 
-        // Update the production house's rating after adding the new web series
         updateProductionHouseRating(productionHouse);
 
         return webSeries.getId();
@@ -55,7 +54,7 @@ public class WebSeriesService {
         int count = 0;
 
         for (WebSeries series : webSeriesList) {
-            if (series.getProductionHouse().equals(productionHouse)) {
+            if (series.getProductionHouse() != null && series.getProductionHouse().equals(productionHouse)) {
                 sumOfRatings += series.getRating();
                 count++;
             }
@@ -64,8 +63,11 @@ public class WebSeriesService {
         if (count > 0) {
             double averageRating = sumOfRatings / count;
             productionHouse.setRatings(averageRating);
-            productionHouseRepository.save(productionHouse);
+        } else {
+            productionHouse.setRatings(0.0);
         }
+
+        productionHouseRepository.save(productionHouse);
     }
 
 }

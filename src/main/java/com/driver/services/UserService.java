@@ -7,6 +7,7 @@ import com.driver.model.User;
 import com.driver.model.WebSeries;
 import com.driver.repository.UserRepository;
 import com.driver.repository.WebSeriesRepository;
+import java.util.stream.Collectors;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -24,47 +25,73 @@ public class UserService {
 
     public Integer addUser(User user){
 
-        userRepository.save(user);
-        return user.getId();
+        User savedUser = userRepository.save(user);
+        System.out.println("User saved with ID: " + savedUser.getId());
+        return savedUser.getId();
     }
 
     public Integer getAvailableCountOfWebSeriesViewable(Integer userId){
 
-        User user = userRepository.findById(userId).orElseThrow(() -> new RuntimeException("User not found"));
+        User user = userRepository.findById(userId)
+            .orElseThrow(() -> new RuntimeException("User not found"));
         Subscription subscription = user.getSubscription();
         SubscriptionType subscriptionType = subscription.getSubscriptionType();
 
-        // Get all web series
+        List<WebSeries> availableWebSeries;
+
         List<WebSeries> allWebSeries = webSeriesRepository.findAll();
 
-        // Filter based on the subscription type
-        return (int) allWebSeries.stream().filter(webSeries ->
-            (subscriptionType == SubscriptionType.ELITE) ||
-                (subscriptionType == SubscriptionType.PRO && webSeries.getSubscriptionType() != SubscriptionType.ELITE) ||
-                (subscriptionType == SubscriptionType.BASIC && webSeries.getSubscriptionType() == SubscriptionType.BASIC)
-        ).count();
+        if (subscriptionType == SubscriptionType.ELITE) {
+            availableWebSeries = allWebSeries;
+        } else if (subscriptionType == SubscriptionType.PRO) {
+            availableWebSeries = allWebSeries.stream()
+                .filter(webSeries -> webSeries.getSubscriptionType() != SubscriptionType.ELITE)
+                .collect(Collectors.toList());
+        } else {
+            availableWebSeries = allWebSeries.stream()
+                .filter(webSeries -> webSeries.getSubscriptionType() == SubscriptionType.BASIC)
+                .collect(Collectors.toList());
+        }
+
+        return availableWebSeries.size();
     }
 
     public double calculateSubscriptionCost(User user) {
+        if (user == null || user.getSubscription() == null) {
+            throw new IllegalArgumentException("User or subscription cannot be null");
+        }
+
         Subscription subscription = user.getSubscription();
         int noOfScreens = subscription.getNoOfScreensSubscribed();
 
+        System.out.println("Subscription Type: " + subscription.getSubscriptionType());
+        System.out.println("Number of Screens: " + noOfScreens);
+
         switch (subscription.getSubscriptionType()) {
             case BASIC:
-                return 500 + (200 * noOfScreens); // BASIC plan cost
+                // Basic plan: 500 + (200 * noOfScreensSubscribed)
+                return 500 + (200 * noOfScreens);
             case PRO:
-                return 800 + (250 * noOfScreens); // PRO plan cost
+                // Pro plan: 800 + (250 * noOfScreensSubscribed)
+                return 800 + (250 * noOfScreens);
             case ELITE:
-                return 1000 + (350 * noOfScreens); // ELITE plan cost
+                // Elite plan: 1000 + (350 * noOfScreensSubscribed)
+                return 1000 + (350 * noOfScreens);
             default:
                 throw new IllegalArgumentException("Invalid subscription type");
         }
     }
 
     public boolean canWatchMatch(Integer userId) {
-        User user = userRepository.findById(userId).orElseThrow(() -> new RuntimeException("User not found"));
+        User user = userRepository.findById(userId)
+            .orElseThrow(() -> new RuntimeException("User not found"));
         Subscription subscription = user.getSubscription();
-        return subscription.getSubscriptionType() == SubscriptionType.ELITE; // ELITE plan can watch matches
+
+        if (subscription == null) {
+            throw new RuntimeException("User does not have an active subscription");
+        }
+
+        return subscription.getSubscriptionType() == SubscriptionType.ELITE; // Only ELITE can watch matches
     }
 
 }
