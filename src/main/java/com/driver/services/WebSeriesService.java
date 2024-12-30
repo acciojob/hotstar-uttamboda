@@ -7,7 +7,7 @@ import com.driver.repository.ProductionHouseRepository;
 import com.driver.repository.WebSeriesRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
-
+import java.util.List;
 @Service
 public class WebSeriesService {
 
@@ -23,8 +23,49 @@ public class WebSeriesService {
         //Incase the seriesName is already present in the Db throw Exception("Series is already present")
         //use function written in Repository Layer for the same
         //Dont forget to save the production and webseries Repo
+        WebSeries existingWebSeries = webSeriesRepository.findBySeriesName(webSeriesEntryDto.getSeriesName());
+        if (existingWebSeries != null) {
+            throw new Exception("Series is already present");
+        }
 
-        return null;
+        // Retrieve the production house using its ID
+        ProductionHouse productionHouse = productionHouseRepository.findById(webSeriesEntryDto.getProductionHouseId())
+            .orElseThrow(() -> new Exception("Production house not found"));
+
+        // Create a new web series object
+        WebSeries webSeries = new WebSeries();
+        webSeries.setSeriesName(webSeriesEntryDto.getSeriesName());
+        webSeries.setAgeLimit(webSeriesEntryDto.getAgeLimit());
+        webSeries.setRating(webSeriesEntryDto.getRating());
+        webSeries.setSubscriptionType(webSeriesEntryDto.getSubscriptionType());
+        webSeries.setProductionHouse(productionHouse);
+
+        // Save the new web series to the repository
+        webSeriesRepository.save(webSeries);
+
+        // Update the production house's rating after adding the new web series
+        updateProductionHouseRating(productionHouse);
+
+        return webSeries.getId();
+    }
+    private void updateProductionHouseRating(ProductionHouse productionHouse) {
+        List<WebSeries> webSeriesList = webSeriesRepository.findAll();
+
+        double sumOfRatings = 0.0;
+        int count = 0;
+
+        for (WebSeries series : webSeriesList) {
+            if (series.getProductionHouse().equals(productionHouse)) {
+                sumOfRatings += series.getRating();
+                count++;
+            }
+        }
+
+        if (count > 0) {
+            double averageRating = sumOfRatings / count;
+            productionHouse.setRatings(averageRating);
+            productionHouseRepository.save(productionHouse);
+        }
     }
 
 }

@@ -24,18 +24,47 @@ public class UserService {
 
     public Integer addUser(User user){
 
-        //Jut simply add the user to the Db and return the userId returned by the repository
-        return null;
+        userRepository.save(user);
+        return user.getId();
     }
 
     public Integer getAvailableCountOfWebSeriesViewable(Integer userId){
 
-        //Return the count of all webSeries that a user can watch based on his ageLimit and subscriptionType
-        //Hint: Take out all the Webseries from the WebRepository
+        User user = userRepository.findById(userId).orElseThrow(() -> new RuntimeException("User not found"));
+        Subscription subscription = user.getSubscription();
+        SubscriptionType subscriptionType = subscription.getSubscriptionType();
 
+        // Get all web series
+        List<WebSeries> allWebSeries = webSeriesRepository.findAll();
 
-        return null;
+        // Filter based on the subscription type
+        return (int) allWebSeries.stream().filter(webSeries ->
+            (subscriptionType == SubscriptionType.ELITE) ||
+                (subscriptionType == SubscriptionType.PRO && webSeries.getSubscriptionType() != SubscriptionType.ELITE) ||
+                (subscriptionType == SubscriptionType.BASIC && webSeries.getSubscriptionType() == SubscriptionType.BASIC)
+        ).count();
     }
 
+    public double calculateSubscriptionCost(User user) {
+        Subscription subscription = user.getSubscription();
+        int noOfScreens = subscription.getNoOfScreensSubscribed();
+
+        switch (subscription.getSubscriptionType()) {
+            case BASIC:
+                return 500 + (200 * noOfScreens); // BASIC plan cost
+            case PRO:
+                return 800 + (250 * noOfScreens); // PRO plan cost
+            case ELITE:
+                return 1000 + (350 * noOfScreens); // ELITE plan cost
+            default:
+                throw new IllegalArgumentException("Invalid subscription type");
+        }
+    }
+
+    public boolean canWatchMatch(Integer userId) {
+        User user = userRepository.findById(userId).orElseThrow(() -> new RuntimeException("User not found"));
+        Subscription subscription = user.getSubscription();
+        return subscription.getSubscriptionType() == SubscriptionType.ELITE; // ELITE plan can watch matches
+    }
 
 }
