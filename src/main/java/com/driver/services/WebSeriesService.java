@@ -5,9 +5,12 @@ import com.driver.model.ProductionHouse;
 import com.driver.model.WebSeries;
 import com.driver.repository.ProductionHouseRepository;
 import com.driver.repository.WebSeriesRepository;
+import java.util.List;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
-import java.util.List;
+import org.springframework.transaction.annotation.Transactional;
+
+
 @Service
 public class WebSeriesService {
 
@@ -17,22 +20,24 @@ public class WebSeriesService {
     @Autowired
     ProductionHouseRepository productionHouseRepository;
 
+    @Transactional
     public Integer addWebSeries(WebSeriesEntryDto webSeriesEntryDto)throws  Exception{
 
         //Add a webSeries to the database and update the ratings of the productionHouse
         //Incase the seriesName is already present in the Db throw Exception("Series is already present")
         //use function written in Repository Layer for the same
         //Dont forget to save the production and webseries Repo
+
         WebSeries existingWebSeries = webSeriesRepository.findBySeriesName(webSeriesEntryDto.getSeriesName());
         if (existingWebSeries != null) {
             throw new Exception("Series is already present");
         }
 
-        // Retrieve the production house using its ID
+        // Retrieve the production house
         ProductionHouse productionHouse = productionHouseRepository.findById(webSeriesEntryDto.getProductionHouseId())
             .orElseThrow(() -> new Exception("Production house not found"));
 
-        // Create a new web series object
+        // Create the new WebSeries entity
         WebSeries webSeries = new WebSeries();
         webSeries.setSeriesName(webSeriesEntryDto.getSeriesName());
         webSeries.setAgeLimit(webSeriesEntryDto.getAgeLimit());
@@ -40,34 +45,15 @@ public class WebSeriesService {
         webSeries.setSubscriptionType(webSeriesEntryDto.getSubscriptionType());
         webSeries.setProductionHouse(productionHouse);
 
-        // Save the new web series to the repository
-        webSeriesRepository.save(webSeries);
+        System.out.println("Saving WebSeries: " + webSeries.getSeriesName());
 
-        updateProductionHouseRating(productionHouse);
+        // Save the web series to the database
+        WebSeries savedWebSeries = webSeriesRepository.save(webSeries);
 
-        return webSeries.getId();
-    }
-    private void updateProductionHouseRating(ProductionHouse productionHouse) {
-        List<WebSeries> webSeriesList = webSeriesRepository.findAll();
+        System.out.println("Saved WebSeries ID: " + savedWebSeries.getId());
 
-        double sumOfRatings = 0.0;
-        int count = 0;
-
-        for (WebSeries series : webSeriesList) {
-            if (series.getProductionHouse() != null && series.getProductionHouse().equals(productionHouse)) {
-                sumOfRatings += series.getRating();
-                count++;
-            }
-        }
-
-        if (count > 0) {
-            double averageRating = sumOfRatings / count;
-            productionHouse.setRatings(averageRating);
-        } else {
-            productionHouse.setRatings(0.0);
-        }
-
-        productionHouseRepository.save(productionHouse);
+        // Return the ID of the saved WebSeries
+        return savedWebSeries.getId();
     }
 
 }

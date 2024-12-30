@@ -69,14 +69,11 @@ public class UserService {
 
         switch (subscription.getSubscriptionType()) {
             case BASIC:
-                // Basic plan: 500 + (200 * noOfScreensSubscribed)
-                return 500 + (200 * noOfScreens);
+                return 500 + (200 * noOfScreens);  // Basic plan cost
             case PRO:
-                // Pro plan: 800 + (250 * noOfScreensSubscribed)
-                return 800 + (250 * noOfScreens);
+                return 800 + (250 * noOfScreens);  // Pro plan cost
             case ELITE:
-                // Elite plan: 1000 + (350 * noOfScreensSubscribed)
-                return 1000 + (350 * noOfScreens);
+                return 1000 + (350 * noOfScreens);  // Elite plan cost
             default:
                 throw new IllegalArgumentException("Invalid subscription type");
         }

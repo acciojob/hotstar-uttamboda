@@ -51,18 +51,24 @@ public class SubscriptionService {
     }
     private int calculateFinalAmount(SubscriptionType subscriptionType, int noOfScreensRequired) {
         int baseAmount = 0;
+        int screenCost = 0;
+
         switch (subscriptionType) {
             case BASIC:
-                baseAmount = 100;
+                baseAmount = 500;
+                screenCost = 200;
                 break;
             case PRO:
-                baseAmount = 200;
+                baseAmount = 800;
+                screenCost = 250;
                 break;
             case ELITE:
-                baseAmount = 300;
+                baseAmount = 1000;
+                screenCost = 350;
                 break;
         }
-        return baseAmount * noOfScreensRequired;
+
+        return baseAmount + (screenCost * noOfScreensRequired);
     }
 
     public Integer upgradeSubscription(Integer userId)throws Exception{
