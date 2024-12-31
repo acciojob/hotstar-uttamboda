@@ -26,6 +26,7 @@ public class SubscriptionService {
     public Integer buySubscription(SubscriptionEntryDto subscriptionEntryDto){
 
         //Save The subscription Object into the Db and return the total Amount that user has to pay
+
         Optional<User> optionalUser = userRepository.findById(subscriptionEntryDto.getUserId());
         if (!optionalUser.isPresent()) {
             throw new IllegalArgumentException("User not found with ID: " + subscriptionEntryDto.getUserId());
@@ -33,15 +34,14 @@ public class SubscriptionService {
 
         User user = optionalUser.get();
 
-        // Calculate the total price based on subscription type and number of screens
-        int pricePerScreen = getSubscriptionPrice(subscriptionEntryDto.getSubscriptionType());
-        int totalAmount = pricePerScreen * subscriptionEntryDto.getNoOfScreensRequired();
+        // Calculate the total amount to be paid based on the subscription type and number of screens
+        int totalAmount = calculateTotalAmount(subscriptionEntryDto.getSubscriptionType(), subscriptionEntryDto.getNoOfScreensRequired());
 
         // Create a new Subscription object
         Subscription newSubscription = new Subscription();
         newSubscription.setSubscriptionType(subscriptionEntryDto.getSubscriptionType());
         newSubscription.setNoOfScreensSubscribed(subscriptionEntryDto.getNoOfScreensRequired());
-        newSubscription.setStartSubscriptionDate(new Date()); // Set the start date to the current date
+        newSubscription.setStartSubscriptionDate(new Date()); // Set the current date as the start date
         newSubscription.setTotalAmountPaid(totalAmount);
         newSubscription.setUser(user);
 
@@ -50,8 +50,26 @@ public class SubscriptionService {
 
         // Return the total amount the user has to pay
         return totalAmount;
+    }
+    private int calculateTotalAmount(SubscriptionType subscriptionType, int noOfScreensRequired) {
+        int totalAmount = 0;
 
+        // Calculate the cost based on the subscription type and number of screens
+        switch (subscriptionType) {
+            case BASIC:
+                totalAmount = 500 + 200 * noOfScreensRequired;
+                break;
+            case PRO:
+                totalAmount = 800 + 250 * noOfScreensRequired;
+                break;
+            case ELITE:
+                totalAmount = 1000 + 350 * noOfScreensRequired;
+                break;
+            default:
+                throw new IllegalArgumentException("Invalid subscription type: " + subscriptionType);
+        }
 
+        return totalAmount;
     }
 
     public Integer upgradeSubscription(Integer userId)throws Exception{
@@ -60,51 +78,36 @@ public class SubscriptionService {
         //In all other cases just try to upgrade the subscription and tell the difference of price that user has to pay
         //update the subscription in the repository
 
-        Optional<User> optionalUser = userRepository.findById(userId);
-        if (!optionalUser.isPresent()) {
-            throw new IllegalArgumentException("User not found with ID: " + userId);
-        }
+        Optional<Subscription> currentSubscriptionOptional = subscriptionRepository.findByUserId(userId);
 
-        User user = optionalUser.get();
-
-        List<Subscription> userSubscriptions = subscriptionRepository.findAll();
-        if (userSubscriptions.isEmpty()) {
+        // Check if the subscription exists
+        if (!currentSubscriptionOptional.isPresent()) {
             throw new IllegalArgumentException("User does not have an active subscription.");
         }
 
-        Subscription currentSubscription = userSubscriptions.get(0);
+        // Retrieve the subscription from the Optional
+        Subscription currentSubscription = currentSubscriptionOptional.get();
         SubscriptionType currentType = currentSubscription.getSubscriptionType();
 
+        // Check if the user is already at the highest subscription level
         if (currentType == SubscriptionType.ELITE) {
-            throw new Exception("Already the best subscription.");
+            throw new Exception("Already the best subscription");
         }
 
+        // Determine the next subscription level
         SubscriptionType newType = getNextSubscriptionType(currentType);
 
-        int priceDifference = getSubscriptionPrice(newType) - getSubscriptionPrice(currentType);
+        // Calculate the price difference
+        int currentPrice = calculateTotalAmount(currentType, currentSubscription.getNoOfScreensSubscribed());
+        int newPrice = calculateTotalAmount(newType, currentSubscription.getNoOfScreensSubscribed());
+        int priceDifference = newPrice - currentPrice;
 
+        // Update the subscription to the new type
         currentSubscription.setSubscriptionType(newType);
         subscriptionRepository.save(currentSubscription);
 
         return priceDifference;
     }
-
-    public Integer calculateTotalRevenueOfHotstar(){
-
-        //We need to find out total Revenue of hotstar : from all the subscriptions combined
-        //Hint is to use findAll function from the SubscriptionDb
-
-        List<Subscription> allSubscriptions = subscriptionRepository.findAll();
-
-        int totalRevenue = 0;
-        for (Subscription subscription : allSubscriptions) {
-            totalRevenue += subscription.getTotalAmountPaid();
-        }
-
-        return totalRevenue;
-    }
-
-
     private SubscriptionType getNextSubscriptionType(SubscriptionType currentType) {
         switch (currentType) {
             case BASIC:
@@ -116,17 +119,21 @@ public class SubscriptionService {
         }
     }
 
-    // Helper method to get the price of a subscription type
-    private int getSubscriptionPrice(SubscriptionType subscriptionType) {
-        switch (subscriptionType) {
-            case BASIC:
-                return 500 + 200;
-            case PRO:
-                return 800 + 250;
-            case ELITE:
-                return 1000 + 350;
-            default:
-                throw new IllegalArgumentException("Unknown subscription type: " + subscriptionType);
+    public Integer calculateTotalRevenueOfHotstar(){
+
+        //We need to find out total Revenue of hotstar : from all the subscriptions combined
+        //Hint is to use findAll function from the SubscriptionDb
+
+        List<Subscription> allSubscriptions = subscriptionRepository.findAll();
+
+        // Step 2: Calculate the total revenue by summing up the totalAmountPaid for each subscription
+        int totalRevenue = 0;
+
+        for (Subscription subscription : allSubscriptions) {
+            totalRevenue += subscription.getTotalAmountPaid();
         }
+
+        // Step 3: Return the total revenue
+        return totalRevenue;
     }
 }
