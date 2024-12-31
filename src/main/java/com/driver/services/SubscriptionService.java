@@ -2,12 +2,13 @@ package com.driver.services;
 
 
 import com.driver.EntryDto.SubscriptionEntryDto;
+import com.driver.EntryDto.SubscriptionRequestDto;
+import com.driver.exceptions.UserNotFoundException;
 import com.driver.model.Subscription;
 import com.driver.model.SubscriptionType;
 import com.driver.model.User;
 import com.driver.repository.SubscriptionRepository;
 import com.driver.repository.UserRepository;
-import java.util.Optional;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -27,113 +28,111 @@ public class SubscriptionService {
 
         //Save The subscription Object into the Db and return the total Amount that user has to pay
 
-        Optional<User> optionalUser = userRepository.findById(subscriptionEntryDto.getUserId());
-        if (!optionalUser.isPresent()) {
-            throw new IllegalArgumentException("User not found with ID: " + subscriptionEntryDto.getUserId());
-        }
-
-        User user = optionalUser.get();
-
-        // Calculate the total amount to be paid based on the subscription type and number of screens
-        int totalAmount = calculateTotalAmount(subscriptionEntryDto.getSubscriptionType(), subscriptionEntryDto.getNoOfScreensRequired());
-
-        // Create a new Subscription object
-        Subscription newSubscription = new Subscription();
-        newSubscription.setSubscriptionType(subscriptionEntryDto.getSubscriptionType());
-        newSubscription.setNoOfScreensSubscribed(subscriptionEntryDto.getNoOfScreensRequired());
-        newSubscription.setStartSubscriptionDate(new Date()); // Set the current date as the start date
-        newSubscription.setTotalAmountPaid(totalAmount);
-        newSubscription.setUser(user);
-
-        // Save the subscription to the database
-        subscriptionRepository.save(newSubscription);
-
-        // Return the total amount the user has to pay
+        Subscription subscription = convertDtoToEntity(subscriptionEntryDto);
+        int totalAmount = calculateTotalAmount(subscription.getSubscriptionType(), subscription.getNoOfScreensSubscribed());
+        subscription.setTotalAmountPaid(totalAmount);
+        subscriptionRepository.save(subscription);
         return totalAmount;
     }
-    private int calculateTotalAmount(SubscriptionType subscriptionType, int noOfScreensRequired) {
-        int totalAmount = 0;
 
-        // Calculate the cost based on the subscription type and number of screens
+    private int calculateTotalAmount(SubscriptionType subscriptionType, int noOfScreensSubscribed) {
+        int basePrice;
+        int screenPrice;
+
         switch (subscriptionType) {
             case BASIC:
-                totalAmount = 500 + 200 * noOfScreensRequired;
+                basePrice = 500;
+                screenPrice = 200;
                 break;
             case PRO:
-                totalAmount = 800 + 250 * noOfScreensRequired;
+                basePrice = 800;
+                screenPrice = 250;
                 break;
             case ELITE:
-                totalAmount = 1000 + 350 * noOfScreensRequired;
+                basePrice = 1000;
+                screenPrice = 350;
                 break;
             default:
-                throw new IllegalArgumentException("Invalid subscription type: " + subscriptionType);
+                throw new IllegalArgumentException("Unknown subscription type: " + subscriptionType);
         }
 
-        return totalAmount;
+        return basePrice + (screenPrice * noOfScreensSubscribed);
+    }
+
+    private Subscription convertDtoToEntity(SubscriptionEntryDto subscriptionEntryDto) {
+        Subscription subscription = new Subscription();
+        subscription.setSubscriptionType(subscriptionEntryDto.getSubscriptionType());
+        subscription.setNoOfScreensSubscribed(subscriptionEntryDto.getNoOfScreensRequired());
+        subscription.setStartSubscriptionDate(new Date());
+        User user = userRepository.findById(subscriptionEntryDto.getUserId()).get();
+        subscription.setUser(user);
+        user.setSubscription(subscription);
+        userRepository.save(user);
+        return subscription;
     }
 
     public Integer upgradeSubscription(Integer userId)throws Exception{
 
-        //If you are already at an ElITE subscription : then throw Exception ("Already the best Subscription")
-        //In all other cases just try to upgrade the subscription and tell the difference of price that user has to pay
-        //update the subscription in the repository
+        User user = userRepository.findById(userId).get();
 
-        Optional<Subscription> currentSubscriptionOptional = subscriptionRepository.findByUserId(userId);
 
-        // Check if the subscription exists
-        if (!currentSubscriptionOptional.isPresent()) {
-            throw new IllegalArgumentException("User does not have an active subscription.");
+        Subscription subscription = user.getSubscription();
+
+//        if (subscription == null) {
+//            throw new IllegalArgumentException("User does not have a subscription");
+//        }
+
+        SubscriptionType subscriptionType = subscription.getSubscriptionType();
+
+//        if (subscription.getTotalAmountPaid() == 0) {
+//            throw new SubscriptionNotPaidException("Current subscription not paid for");
+//        }
+
+        if (subscriptionType.equals(SubscriptionType.ELITE)) {
+            throw new Exception("Already the best Subscription");
         }
 
-        // Retrieve the subscription from the Optional
-        Subscription currentSubscription = currentSubscriptionOptional.get();
-        SubscriptionType currentType = currentSubscription.getSubscriptionType();
+//        if(subscription.getSubscriptionType().equals(SubscriptionType.BASIC)) {
+//            subscription.setSubscriptionType(SubscriptionType.PRO);
+//            subscription.setTotalAmountPaid();
+//        }
 
-        // Check if the user is already at the highest subscription level
-        if (currentType == SubscriptionType.ELITE) {
-            throw new Exception("Already the best subscription");
-        }
+        // Upgrade to next subscription
+        SubscriptionType newSubscriptionType = SubscriptionType.values()[subscriptionType.ordinal() + 1];
+        subscription.setSubscriptionType(newSubscriptionType);
 
-        // Determine the next subscription level
-        SubscriptionType newType = getNextSubscriptionType(currentType);
+        // Calculate new total amount
+        int newTotalAmount = calculateTotalAmount(newSubscriptionType, subscription.getNoOfScreensSubscribed());
+        int difference = newTotalAmount - subscription.getTotalAmountPaid();
 
-        // Calculate the price difference
-        int currentPrice = calculateTotalAmount(currentType, currentSubscription.getNoOfScreensSubscribed());
-        int newPrice = calculateTotalAmount(newType, currentSubscription.getNoOfScreensSubscribed());
-        int priceDifference = newPrice - currentPrice;
+        // Set the new total amount paid
+        subscription.setTotalAmountPaid(newTotalAmount);
 
-        // Update the subscription to the new type
-        currentSubscription.setSubscriptionType(newType);
-        subscriptionRepository.save(currentSubscription);
+        // Save subscription after update
+        subscriptionRepository.save(subscription);
 
-        return priceDifference;
-    }
-    private SubscriptionType getNextSubscriptionType(SubscriptionType currentType) {
-        switch (currentType) {
-            case BASIC:
-                return SubscriptionType.PRO;
-            case PRO:
-                return SubscriptionType.ELITE;
-            default:
-                throw new IllegalStateException("No next subscription available for " + currentType);
-        }
+        return difference;
     }
 
     public Integer calculateTotalRevenueOfHotstar(){
 
-        //We need to find out total Revenue of hotstar : from all the subscriptions combined
-        //Hint is to use findAll function from the SubscriptionDb
-
-        List<Subscription> allSubscriptions = subscriptionRepository.findAll();
-
-        // Step 2: Calculate the total revenue by summing up the totalAmountPaid for each subscription
+        List<Subscription> subscriptions = subscriptionRepository.findAll();
         int totalRevenue = 0;
 
-        for (Subscription subscription : allSubscriptions) {
-            totalRevenue += subscription.getTotalAmountPaid();
+        for (Subscription sub : subscriptions) {
+            totalRevenue += sub.getTotalAmountPaid();
         }
-
-        // Step 3: Return the total revenue
         return totalRevenue;
+    }
+    public Subscription createSubscription(SubscriptionRequestDto request) {
+        Subscription subscription = new Subscription();
+        subscription.setUser(userRepository.findById(request.getUserId())
+            .orElseThrow(() -> new UserNotFoundException("User not found with ID: " + request.getUserId())));
+        subscription.setSubscriptionType(request.getSubscriptionType());
+        subscription.setNoOfScreensSubscribed(request.getNoOfScreensSubscribed());
+        subscription.setStartSubscriptionDate(new Date());
+        subscription.setTotalAmountPaid(calculateTotalAmount(request.getSubscriptionType(), request.getNoOfScreensSubscribed()));
+        subscriptionRepository.save(subscription);
+        return subscription;
     }
 }

@@ -4,6 +4,8 @@ import com.driver.model.ProductionHouse;
 import com.driver.model.SubscriptionType;
 
 import javax.persistence.Column;
+import javax.persistence.EnumType;
+import javax.persistence.Enumerated;
 import javax.persistence.JoinColumn;
 import javax.persistence.ManyToOne;
 
@@ -16,6 +18,7 @@ public class WebSeriesEntryDto {
 
     private double rating;
 
+    @Enumerated(EnumType.STRING)
     private SubscriptionType subscriptionType; //This denotes with which of subscriptionType this webseries comes ie. BASIC,PRO, ELITE
 
     private Integer productionHouseId;

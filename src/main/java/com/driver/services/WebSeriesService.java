@@ -28,32 +28,30 @@ public class WebSeriesService {
         //use function written in Repository Layer for the same
         //Dont forget to save the production and webseries Repo
 
-        WebSeries existingWebSeries = webSeriesRepository.findBySeriesName(webSeriesEntryDto.getSeriesName());
-        if (existingWebSeries != null) {
+        if (webSeriesRepository.findBySeriesName(webSeriesEntryDto.getSeriesName()) != null) {
             throw new Exception("Series is already present");
         }
 
-        // Retrieve the production house
         ProductionHouse productionHouse = productionHouseRepository.findById(webSeriesEntryDto.getProductionHouseId())
             .orElseThrow(() -> new Exception("Production house not found"));
 
-        // Create the new WebSeries entity
+        WebSeries webSeries = convertDtoToEntity(webSeriesEntryDto);
+        webSeries = webSeriesRepository.save(webSeries);
+
+        List<WebSeries> webSeriesList = webSeriesRepository.findByProductionHouseId(productionHouse.getId());
+        double averageRating = webSeriesList.stream().mapToDouble(WebSeries::getRating).average().orElse(0.0);
+        productionHouse.setRatings(averageRating);
+        productionHouseRepository.save(productionHouse);
+
+        return webSeries.getId();
+    }
+    private WebSeries convertDtoToEntity(WebSeriesEntryDto webSeriesEntryDto) {
         WebSeries webSeries = new WebSeries();
         webSeries.setSeriesName(webSeriesEntryDto.getSeriesName());
         webSeries.setAgeLimit(webSeriesEntryDto.getAgeLimit());
         webSeries.setRating(webSeriesEntryDto.getRating());
         webSeries.setSubscriptionType(webSeriesEntryDto.getSubscriptionType());
-        webSeries.setProductionHouse(productionHouse);
-
-        System.out.println("Saving WebSeries: " + webSeries.getSeriesName());
-
-        // Save the web series to the database
-        WebSeries savedWebSeries = webSeriesRepository.save(webSeries);
-
-        System.out.println("Saved WebSeries ID: " + savedWebSeries.getId());
-
-        // Return the ID of the saved WebSeries
-        return savedWebSeries.getId();
+        webSeries.setProductionHouse(productionHouseRepository.findById(webSeriesEntryDto.getProductionHouseId()).get());
+        return webSeries;
     }
-
 }

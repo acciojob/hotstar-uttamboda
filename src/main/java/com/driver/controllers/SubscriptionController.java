@@ -2,12 +2,17 @@ package com.driver.controllers;
 
 
 import com.driver.EntryDto.SubscriptionEntryDto;
+import com.driver.EntryDto.SubscriptionRequestDto;
+import com.driver.model.Subscription;
 import com.driver.services.SubscriptionService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -17,6 +22,12 @@ public class SubscriptionController {
 
     @Autowired
     SubscriptionService subscriptionService;
+
+    @PostMapping("/createSubscriptions")
+    public ResponseEntity<Subscription> createSubscription(@RequestBody SubscriptionRequestDto request) {
+        Subscription subscription = subscriptionService.createSubscription(request);
+        return new ResponseEntity<>(subscription, HttpStatus.CREATED);
+    }
 
     @PostMapping("/buy")
     public Integer buySubscription(SubscriptionEntryDto subscriptionEntryDto){
