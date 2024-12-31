@@ -25,54 +25,33 @@ public class SubscriptionService {
 
     public Integer buySubscription(SubscriptionEntryDto subscriptionEntryDto){
 
-        int userId = subscriptionEntryDto.getUserId();
-        SubscriptionType subscriptionType = subscriptionEntryDto.getSubscriptionType();
-        int noOfScreensRequired = subscriptionEntryDto.getNoOfScreensRequired();
-
-        Optional<User> userOpt = userRepository.findById(userId);
-        if (!userOpt.isPresent()) {
-            throw new RuntimeException("User not found");
+        //Save The subscription Object into the Db and return the total Amount that user has to pay
+        Optional<User> optionalUser = userRepository.findById(subscriptionEntryDto.getUserId());
+        if (!optionalUser.isPresent()) {
+            throw new IllegalArgumentException("User not found with ID: " + subscriptionEntryDto.getUserId());
         }
 
-        User user = userOpt.get();
+        User user = optionalUser.get();
 
-        if (user.getSubscription() != null) {
-            throw new RuntimeException("User already has an active subscription");
-        }
+        // Calculate the total price based on subscription type and number of screens
+        int pricePerScreen = getSubscriptionPrice(subscriptionEntryDto.getSubscriptionType());
+        int totalAmount = pricePerScreen * subscriptionEntryDto.getNoOfScreensRequired();
 
-        int finalAmount = calculateFinalAmount(subscriptionType, noOfScreensRequired);
+        // Create a new Subscription object
+        Subscription newSubscription = new Subscription();
+        newSubscription.setSubscriptionType(subscriptionEntryDto.getSubscriptionType());
+        newSubscription.setNoOfScreensSubscribed(subscriptionEntryDto.getNoOfScreensRequired());
+        newSubscription.setStartSubscriptionDate(new Date()); // Set the start date to the current date
+        newSubscription.setTotalAmountPaid(totalAmount);
+        newSubscription.setUser(user);
 
-        Subscription subscription = new Subscription();
-        subscription.setSubscriptionType(subscriptionType);
-        subscription.setNoOfScreensSubscribed(noOfScreensRequired);
-        subscription.setStartSubscriptionDate(new Date());
-        subscription.setTotalAmountPaid(finalAmount);
-        subscription.setUser(user);
+        // Save the subscription to the database
+        subscriptionRepository.save(newSubscription);
 
-        subscriptionRepository.save(subscription);
+        // Return the total amount the user has to pay
+        return totalAmount;
 
-        return finalAmount;
-    }
-    private int calculateFinalAmount(SubscriptionType subscriptionType, int noOfScreensRequired) {
-        int baseAmount = 0;
-        int screenCost = 0;
 
-        switch (subscriptionType) {
-            case BASIC:
-                baseAmount = 500;
-                screenCost = 200;
-                break;
-            case PRO:
-                baseAmount = 800;
-                screenCost = 250;
-                break;
-            case ELITE:
-                baseAmount = 1000;
-                screenCost = 350;
-                break;
-        }
-
-        return baseAmount + (screenCost * noOfScreensRequired);
     }
 
     public Integer upgradeSubscription(Integer userId)throws Exception{
@@ -81,67 +60,73 @@ public class SubscriptionService {
         //In all other cases just try to upgrade the subscription and tell the difference of price that user has to pay
         //update the subscription in the repository
 
-        Optional<User> userOpt = userRepository.findById(userId);
-        if (!userOpt.isPresent()) { // Replace isEmpty() with !isPresent()
-            throw new RuntimeException("User not found");
+        Optional<User> optionalUser = userRepository.findById(userId);
+        if (!optionalUser.isPresent()) {
+            throw new IllegalArgumentException("User not found with ID: " + userId);
         }
 
-        User user = userOpt.get();
-        Subscription subscription = user.getSubscription();
+        User user = optionalUser.get();
 
-        // Check if the user has an active subscription
-        if (subscription == null) {
-            throw new RuntimeException("User does not have an active subscription");
+        List<Subscription> userSubscriptions = subscriptionRepository.findAll();
+        if (userSubscriptions.isEmpty()) {
+            throw new IllegalArgumentException("User does not have an active subscription.");
         }
 
-        // Check if the user is already on the best subscription (ELITE)
-        SubscriptionType currentType = subscription.getSubscriptionType();
+        Subscription currentSubscription = userSubscriptions.get(0);
+        SubscriptionType currentType = currentSubscription.getSubscriptionType();
+
         if (currentType == SubscriptionType.ELITE) {
-            throw new Exception("Already the best Subscription");
+            throw new Exception("Already the best subscription.");
         }
 
-        // Calculate the price difference for the upgrade
-        int priceDifference = calculatePriceDifference(currentType);
+        SubscriptionType newType = getNextSubscriptionType(currentType);
 
-        // Upgrade the subscription
-        if (currentType == SubscriptionType.BASIC) {
-            subscription.setSubscriptionType(SubscriptionType.PRO);
-        } else if (currentType == SubscriptionType.PRO) {
-            subscription.setSubscriptionType(SubscriptionType.ELITE);
-        }
+        int priceDifference = getSubscriptionPrice(newType) - getSubscriptionPrice(currentType);
 
-        // Update the total amount paid after the upgrade
-        subscription.setTotalAmountPaid(subscription.getTotalAmountPaid() + priceDifference);
-
-        // Save the updated subscription
-        subscriptionRepository.save(subscription);
+        currentSubscription.setSubscriptionType(newType);
+        subscriptionRepository.save(currentSubscription);
 
         return priceDifference;
     }
 
-    // Method to calculate the price difference between current and upgraded subscription
-    private int calculatePriceDifference(SubscriptionType currentType) {
-        int priceDifference = 0;
+    public Integer calculateTotalRevenueOfHotstar(){
 
-        // Determine the price difference for the upgrade
-        switch (currentType) {
-            case BASIC:
-                priceDifference = 300; // Basic to Pro difference
-                break;
-            case PRO:
-                priceDifference = 200; // Pro to Elite difference
-                break;
-        }
-
-        return priceDifference;
-    }
-
-    public Integer calculateTotalRevenueOfHotstar() {
+        //We need to find out total Revenue of hotstar : from all the subscriptions combined
+        //Hint is to use findAll function from the SubscriptionDb
 
         List<Subscription> allSubscriptions = subscriptionRepository.findAll();
 
-        return allSubscriptions.stream()
-            .mapToInt(Subscription::getTotalAmountPaid)
-            .sum();
+        int totalRevenue = 0;
+        for (Subscription subscription : allSubscriptions) {
+            totalRevenue += subscription.getTotalAmountPaid();
+        }
+
+        return totalRevenue;
+    }
+
+
+    private SubscriptionType getNextSubscriptionType(SubscriptionType currentType) {
+        switch (currentType) {
+            case BASIC:
+                return SubscriptionType.PRO;
+            case PRO:
+                return SubscriptionType.ELITE;
+            default:
+                throw new IllegalStateException("No next subscription available for " + currentType);
+        }
+    }
+
+    // Helper method to get the price of a subscription type
+    private int getSubscriptionPrice(SubscriptionType subscriptionType) {
+        switch (subscriptionType) {
+            case BASIC:
+                return 500 + 200;
+            case PRO:
+                return 800 + 250;
+            case ELITE:
+                return 1000 + 350;
+            default:
+                throw new IllegalArgumentException("Unknown subscription type: " + subscriptionType);
+        }
     }
 }
